@@ -660,7 +660,7 @@ impl<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + BuildHasher + Clone> Map<'a, K, V, S>
     ) -> (RwLockReadGuard<'a, HashMap<K, V, S>>, u128, u128) {
         debug_assert!(i < self.shards.len());
         let now = Instant::now();
-        let unchecked = self.shards.get_unchecked(i);
+        let unchecked = self.shards.get(i).unwrap();
         let t1 = now.elapsed().as_micros();
 
         let now = Instant::now();
