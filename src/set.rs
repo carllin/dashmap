@@ -299,7 +299,7 @@ impl<'a, K: 'a + Eq + Hash, S: BuildHasher + Clone> DashSet<K, S> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        self.inner.get(key).map(Ref::new)
+        self.inner.get(key).0.map(Ref::new)
     }
 
     /// Remove excess capacity to reduce memory usage.

@@ -7,6 +7,12 @@ use crate::HashMap;
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
 
+pub struct Timing {
+    pub t1: u128,
+    pub t2: u128,
+    pub t3: u128,
+}
+
 /// Implementation detail that is exposed due to generic constraints in public types.
 
 pub trait Map<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + Clone + BuildHasher> {
@@ -22,7 +28,10 @@ pub trait Map<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + Clone + BuildHasher> {
     ///
     /// The index must not be out of bounds.
 
-    unsafe fn _yield_read_shard(&'a self, i: usize) -> RwLockReadGuard<'a, HashMap<K, V, S>>;
+    unsafe fn _yield_read_shard(
+        &'a self,
+        i: usize,
+    ) -> (RwLockReadGuard<'a, HashMap<K, V, S>>, u128, u128);
 
     /// # Safety
     ///
@@ -50,7 +59,7 @@ pub trait Map<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + Clone + BuildHasher> {
     where
         Self: Sized;
 
-    fn _get<Q>(&'a self, key: &Q) -> Option<Ref<'a, K, V, S>>
+    fn _get<Q>(&'a self, key: &Q) -> (Option<Ref<'a, K, V, S>>, Timing)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized;
@@ -89,7 +98,7 @@ pub trait Map<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + Clone + BuildHasher> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        self._get(key).is_some()
+        self._get(key).0.is_some()
     }
 
     fn _is_empty(&self) -> bool {

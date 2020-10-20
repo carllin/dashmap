@@ -27,7 +27,9 @@ use mapref::multiple::RefMulti;
 use mapref::one::{Ref, RefMut};
 pub use read_only::ReadOnlyView;
 pub use set::DashSet;
+use std::time::Instant;
 pub use t::Map;
+pub use t::Timing;
 
 cfg_if! {
     if #[cfg(feature = "raw-api")] {
@@ -429,7 +431,7 @@ impl<'a, K: 'a + Eq + Hash, V: 'a, S: BuildHasher + Clone> DashMap<K, V, S> {
     /// assert_eq!(*youtubers.get("Bosnian Bill").unwrap(), 457000);
     /// ```
 
-    pub fn get<Q>(&'a self, key: &Q) -> Option<Ref<'a, K, V, S>>
+    pub fn get<Q>(&'a self, key: &Q) -> (Option<Ref<'a, K, V, S>>, Timing)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -652,10 +654,20 @@ impl<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + BuildHasher + Clone> Map<'a, K, V, S>
         self.shards.get_unchecked(i).get()
     }
 
-    unsafe fn _yield_read_shard(&'a self, i: usize) -> RwLockReadGuard<'a, HashMap<K, V, S>> {
+    unsafe fn _yield_read_shard(
+        &'a self,
+        i: usize,
+    ) -> (RwLockReadGuard<'a, HashMap<K, V, S>>, u128, u128) {
         debug_assert!(i < self.shards.len());
+        let now = Instant::now();
+        let unchecked = self.shards.get_unchecked(i);
+        let t1 = now.elapsed().as_micros();
 
-        self.shards.get_unchecked(i).read()
+        let now = Instant::now();
+        let r = unchecked.read();
+        let t2 = now.elapsed().as_micros();
+
+        (r, t1, t2)
     }
 
     unsafe fn _yield_write_shard(&'a self, i: usize) -> RwLockWriteGuard<'a, HashMap<K, V, S>> {
@@ -720,7 +732,7 @@ impl<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + BuildHasher + Clone> Map<'a, K, V, S>
         IterMut::new(self)
     }
 
-    fn _get<Q>(&'a self, key: &Q) -> Option<Ref<'a, K, V, S>>
+    fn _get<Q>(&'a self, key: &Q) -> (Option<Ref<'a, K, V, S>>, Timing)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -729,18 +741,22 @@ impl<'a, K: 'a + Eq + Hash, V: 'a, S: 'a + BuildHasher + Clone> Map<'a, K, V, S>
 
         let idx = self.determine_shard(hash);
 
-        let shard = unsafe { self._yield_read_shard(idx) };
+        let (shard, t1, t2) = unsafe { self._yield_read_shard(idx) };
 
+        let start = Instant::now();
         if let Some((kptr, vptr)) = shard.get_key_value(key) {
             unsafe {
                 let kptr = util::change_lifetime_const(kptr);
 
                 let vptr = util::change_lifetime_const(vptr);
-
-                Some(Ref::new(shard, kptr, vptr.get()))
+                let t3 = start.elapsed().as_micros();
+                let timing = Timing { t1, t2, t3 };
+                (Some(Ref::new(shard, kptr, vptr.get())), timing)
             }
         } else {
-            None
+            let t3 = start.elapsed().as_micros();
+            let timing = Timing { t1, t2, t3 };
+            (None, timing)
         }
     }
 
@@ -861,7 +877,7 @@ where
     type Output = Ref<'a, K, V, S>;
 
     fn shr(self, key: &Q) -> Self::Output {
-        self.get(key).unwrap()
+        self.get(key).0.unwrap()
     }
 }
 

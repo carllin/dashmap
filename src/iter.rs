@@ -175,7 +175,7 @@ impl<'a, K: Eq + Hash, V, S: 'a + BuildHasher + Clone, M: Map<'a, K, V, S>> Iter
                 return None;
             }
 
-            let guard = unsafe { self.map._yield_read_shard(self.shard_i) };
+            let guard = unsafe { self.map._yield_read_shard(self.shard_i).0 };
 
             let sref: &HashMap<K, V, S> = unsafe { util::change_lifetime_const(&*guard) };
 
